@@ -1,8 +1,12 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { RotateCcw, Move } from 'lucide-react';
 
 export default function ContactOrb3D() {
   const containerRef = useRef(null);
+  const [hasInteracted, setHasInteracted] = useState(false);
+  const [isCustomView, setIsCustomView] = useState(false);
+  const resetFnRef = useRef(null);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -20,7 +24,8 @@ export default function ContactOrb3D() {
       0.1,
       100
     );
-    camera.position.z = 16;
+    const defaultCamZ = 16;
+    camera.position.z = defaultCamZ;
 
     const renderer = new THREE.WebGLRenderer({
       alpha: true,
@@ -90,6 +95,109 @@ export default function ContactOrb3D() {
     pointLight.position.set(8, 8, 8);
     scene.add(pointLight);
 
+    // Touch & Pointer Gesture Engine
+    let isDragging = false;
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let isHorizontalGesture = false;
+    let initialPinchDist = 0;
+    let initialCamZ = defaultCamZ;
+
+    let targetRotY = 0;
+    let targetRotX = 0;
+    let currentRotY = 0;
+    let currentRotX = 0;
+
+    resetFnRef.current = () => {
+      targetRotX = 0;
+      targetRotY = 0;
+      camera.position.z = defaultCamZ;
+      setIsCustomView(false);
+    };
+
+    const handlePointerDown = (e) => {
+      isDragging = true;
+      touchStartX = e.clientX;
+      touchStartY = e.clientY;
+      isHorizontalGesture = false;
+    };
+
+    const handlePointerMove = (e) => {
+      if (!isDragging) return;
+      const deltaX = e.clientX - touchStartX;
+      const deltaY = e.clientY - touchStartY;
+      targetRotY += deltaX * 0.006;
+      targetRotX = THREE.MathUtils.clamp(targetRotX + deltaY * 0.006, -0.7, 0.7);
+      touchStartX = e.clientX;
+      touchStartY = e.clientY;
+      setHasInteracted(true);
+      setIsCustomView(true);
+    };
+
+    const handlePointerUp = () => {
+      isDragging = false;
+    };
+
+    const handleTouchStart = (e) => {
+      if (e.touches.length === 1) {
+        isDragging = true;
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        isHorizontalGesture = false;
+      } else if (e.touches.length === 2) {
+        isDragging = true;
+        initialPinchDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        initialCamZ = camera.position.z;
+      }
+    };
+
+    const handleTouchMove = (e) => {
+      if (e.touches.length === 1 && isDragging) {
+        const deltaX = e.touches[0].clientX - touchStartX;
+        const deltaY = e.touches[0].clientY - touchStartY;
+
+        if (!isHorizontalGesture && Math.abs(deltaX) > Math.abs(deltaY) + 4) {
+          isHorizontalGesture = true;
+        }
+
+        if (isHorizontalGesture) {
+          if (e.cancelable) e.preventDefault();
+          targetRotY += deltaX * 0.009;
+          targetRotX = THREE.MathUtils.clamp(targetRotX + deltaY * 0.007, -0.7, 0.7);
+          touchStartX = e.touches[0].clientX;
+          touchStartY = e.touches[0].clientY;
+          setHasInteracted(true);
+          setIsCustomView(true);
+        }
+      } else if (e.touches.length === 2 && isDragging && initialPinchDist > 0) {
+        if (e.cancelable) e.preventDefault();
+        const currentDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        const pinchRatio = initialPinchDist / currentDist;
+        camera.position.z = THREE.MathUtils.clamp(initialCamZ * pinchRatio, 10, 28);
+        setHasInteracted(true);
+        setIsCustomView(true);
+      }
+    };
+
+    const handleTouchEnd = () => {
+      isDragging = false;
+      isHorizontalGesture = false;
+    };
+
+    const dom = renderer.domElement;
+    dom.addEventListener('pointerdown', handlePointerDown);
+    dom.addEventListener('pointermove', handlePointerMove);
+    dom.addEventListener('pointerup', handlePointerUp);
+    dom.addEventListener('touchstart', handleTouchStart, { passive: false });
+    dom.addEventListener('touchmove', handleTouchMove, { passive: false });
+    dom.addEventListener('touchend', handleTouchEnd);
+
     let animId;
     const startTime = performance.now();
 
@@ -107,6 +215,11 @@ export default function ContactOrb3D() {
       if (!isIntersecting) return;
 
       const elapsed = (currentTime - startTime) * 0.001;
+
+      currentRotY += (targetRotY - currentRotY) * 0.1;
+      currentRotX += (targetRotX - currentRotX) * 0.1;
+      group.rotation.y = currentRotY;
+      group.rotation.x = currentRotX;
 
       if (!prefersReducedMotion) {
         sphere.rotation.y = elapsed * 0.15;
@@ -146,6 +259,14 @@ export default function ContactOrb3D() {
       observer.disconnect();
       window.removeEventListener('resize', handleResize);
       document.removeEventListener('visibilitychange', handleVisibility);
+
+      dom.removeEventListener('pointerdown', handlePointerDown);
+      dom.removeEventListener('pointermove', handlePointerMove);
+      dom.removeEventListener('pointerup', handlePointerUp);
+      dom.removeEventListener('touchstart', handleTouchStart);
+      dom.removeEventListener('touchmove', handleTouchMove);
+      dom.removeEventListener('touchend', handleTouchEnd);
+
       sphereGeo.dispose();
       sphereMat.dispose();
       ring1.geometry.dispose();
@@ -161,10 +282,39 @@ export default function ContactOrb3D() {
     };
   }, []);
 
+  const handleReset = (e) => {
+    e.stopPropagation();
+    if (resetFnRef.current) resetFnRef.current();
+  };
+
   return (
-    <div
-      ref={containerRef}
-      className="w-full h-[280px] sm:h-[340px] relative pointer-events-none"
-    />
+    <div className="w-full h-[280px] sm:h-[340px] relative touch-pan-y select-none">
+      <div ref={containerRef} className="w-full h-full cursor-grab active:cursor-grabbing" />
+
+      {/* Floating Hint Pill */}
+      <div
+        className={`absolute bottom-2 inset-x-0 z-20 flex items-center justify-center pointer-events-none transition-all duration-700 ${
+          hasInteracted ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'
+        }`}
+      >
+        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-950/80 border border-purple-400/30 text-[10px] font-mono text-purple-200 shadow-lg backdrop-blur-md">
+          <Move className="w-3 h-3 text-purple-400 animate-pulse" />
+          <span>Drag to rotate orb</span>
+        </div>
+      </div>
+
+      {/* Reset View Button */}
+      {isCustomView && (
+        <button
+          type="button"
+          onClick={handleReset}
+          className="absolute top-2 right-2 z-20 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full glass-card border border-purple-400/40 text-[10px] font-mono text-purple-200 hover:text-white bg-purple-950/80 hover:bg-purple-900/90 shadow-xl backdrop-blur-md active:scale-95 transition-all cursor-pointer touch-manipulation"
+          aria-label="Reset 3D orb orientation"
+        >
+          <RotateCcw className="w-3 h-3 text-purple-300" />
+          <span>Reset</span>
+        </button>
+      )}
+    </div>
   );
 }

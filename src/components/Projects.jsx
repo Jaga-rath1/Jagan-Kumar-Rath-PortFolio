@@ -1,8 +1,155 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { ExternalLink, ArrowUpRight, Layers, Sparkles, Shield, Car, FileText, Map, Activity } from 'lucide-react';
 import { GithubIcon } from './Icons';
 import { projects } from '../data/portfolioData';
 import ProjectModal from './ProjectModal';
+
+// Interactive 3D Project Card with Touch and Pointer Depth
+function ProjectCard3D({ project, renderProjectVisual, onOpenModal }) {
+  const cardRef = useRef(null);
+  const [tilt, setTilt] = useState({ x: 0, y: 0 });
+  const [spotlight, setSpotlight] = useState({ x: 50, y: 50 });
+  const [isInteracting, setIsInteracting] = useState(false);
+
+  const handlePointerMove = (e) => {
+    if (!cardRef.current) return;
+    const rect = cardRef.current.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+    const x = Math.min(Math.max((clientX - rect.left) / rect.width, 0), 1);
+    const y = Math.min(Math.max((clientY - rect.top) / rect.height, 0), 1);
+
+    setTilt({
+      x: -(y - 0.5) * 14,
+      y: (x - 0.5) * 16
+    });
+    setSpotlight({ x: x * 100, y: y * 100 });
+    setIsInteracting(true);
+  };
+
+  const handlePointerLeave = () => {
+    setIsInteracting(false);
+    setTilt({ x: 0, y: 0 });
+  };
+
+  return (
+    <div
+      ref={cardRef}
+      onMouseMove={handlePointerMove}
+      onMouseLeave={handlePointerLeave}
+      onTouchMove={handlePointerMove}
+      onTouchEnd={handlePointerLeave}
+      className="group relative rounded-2xl glass-card border border-white/10 hover:border-purple-500/50 p-5 sm:p-6 flex flex-col justify-between shadow-xl transition-all duration-300 touch-pan-y"
+      style={{
+        perspective: 1000,
+        transform: `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg) scale3d(${isInteracting ? 1.02 : 1}, ${isInteracting ? 1.02 : 1}, 1)`,
+        transformStyle: 'preserve-3d',
+        transition: isInteracting ? 'transform 0.08s ease-out' : 'transform 0.5s ease-out'
+      }}
+    >
+      {/* Specular Dynamic Spotlight Follower */}
+      <div
+        className="absolute inset-0 rounded-2xl pointer-events-none transition-opacity duration-300 z-10"
+        style={{
+          background: `radial-gradient(circle at ${spotlight.x}% ${spotlight.y}%, rgba(168, 85, 247, 0.22), transparent 60%)`,
+          opacity: isInteracting ? 1 : 0
+        }}
+        aria-hidden="true"
+      />
+
+      <div style={{ transform: 'translateZ(18px)', transformStyle: 'preserve-3d' }}>
+        {/* Visual Artwork Showcase */}
+        <div style={{ transform: 'translateZ(24px)' }}>
+          {renderProjectVisual(project)}
+        </div>
+
+        {/* Content Section */}
+        <div className="mt-5" style={{ transform: 'translateZ(16px)' }}>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] font-mono tracking-wider uppercase text-purple-300/80">
+              {project.shortCategory}
+            </span>
+            {project.featured && (
+              <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span>Live</span>
+              </span>
+            )}
+          </div>
+
+          <h3 className="font-heading font-black text-xl text-white group-hover:text-purple-200 transition-colors">
+            {project.title}
+          </h3>
+
+          <p className="mt-2.5 text-xs text-slate-300 leading-relaxed font-normal line-clamp-3">
+            {project.description}
+          </p>
+        </div>
+
+        {/* Tech Stack Pills */}
+        <div className="mt-4 flex flex-wrap gap-1.5">
+          {project.tech.slice(0, 4).map((tech) => (
+            <span
+              key={tech}
+              className="px-2 py-0.5 rounded text-[10px] font-mono bg-white/[0.03] text-slate-300 border border-white/[0.06]"
+            >
+              {tech}
+            </span>
+          ))}
+          {project.tech.length > 4 && (
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono text-purple-300/70">
+              +{project.tech.length - 4}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Action Buttons */}
+      <div
+        className="mt-6 pt-4 border-t border-white/[0.08] flex items-center justify-between gap-2 relative z-20"
+        style={{ transform: 'translateZ(26px)' }}
+      >
+        <button
+          type="button"
+          onClick={() => onOpenModal(project)}
+          className="text-xs font-semibold text-purple-300 hover:text-white flex items-center gap-1.5 transition-colors min-h-[44px] py-1 active:scale-95 cursor-pointer touch-manipulation"
+        >
+          <span>Explore Architecture</span>
+          <ArrowUpRight className="w-3.5 h-3.5 text-purple-400" />
+        </button>
+
+        <div className="flex items-center gap-2">
+          {project.links.live && (
+            <a
+              href={project.links.live}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-white bg-purple-600/40 hover:bg-purple-500/60 border border-purple-400/40 transition-colors active:scale-95"
+              title="Open Live Website"
+              aria-label={`Open Live Website for ${project.title}`}
+            >
+              <ExternalLink className="w-4 h-4" />
+            </a>
+          )}
+
+          {project.links.github && (
+            <a
+              href={project.links.github}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition-colors active:scale-95"
+              title="View GitHub Repository"
+              aria-label={`View GitHub repository for ${project.title}`}
+            >
+              <GithubIcon className="w-4 h-4 text-purple-300" />
+            </a>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Projects() {
   const [selectedFilter, setSelectedFilter] = useState('all');
@@ -225,7 +372,7 @@ export default function Projects() {
                 href="https://carzodrive1.vercel.app/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-bold font-heading text-white bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-500 hover:to-violet-500 border border-purple-400/40 shadow-lg shadow-purple-950/50 hover:scale-[1.02] transition-all"
+                className="inline-flex items-center gap-2 px-5 py-3 min-h-[44px] rounded-xl text-xs font-bold font-heading text-white bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-500 hover:to-violet-500 border border-purple-400/40 shadow-lg shadow-purple-950/50 hover:scale-[1.02] active:scale-95 transition-all"
               >
                 <span>Launch Live Website</span>
                 <ExternalLink className="w-4 h-4" />
@@ -234,7 +381,7 @@ export default function Projects() {
                 href="https://github.com/Jaga-rath1/CarNest"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-3 rounded-xl text-xs font-semibold text-slate-200 hover:text-white bg-white/5 hover:bg-white/10 border border-white/15 transition-all"
+                className="inline-flex items-center gap-2 px-4 py-3 min-h-[44px] rounded-xl text-xs font-semibold text-slate-200 hover:text-white bg-white/5 hover:bg-white/10 border border-white/15 active:scale-95 transition-all"
               >
                 <GithubIcon className="w-4 h-4 text-purple-300" />
                 <span>Source Code</span>
@@ -243,97 +390,15 @@ export default function Projects() {
           </div>
         )}
 
-        {/* Projects Grid */}
+        {/* 3D Interactive Projects Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
           {filteredProjects.map((project) => (
-            <div
+            <ProjectCard3D
               key={project.id}
-              className="group relative rounded-2xl glass-card border border-white/10 hover:border-purple-500/40 p-5 sm:p-6 flex flex-col justify-between transition-all duration-300 shadow-xl"
-            >
-              <div>
-                {/* Visual Artwork Showcase */}
-                {renderProjectVisual(project)}
-
-                {/* Content Section */}
-                <div className="mt-5">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] font-mono tracking-wider uppercase text-purple-300/80">
-                      {project.shortCategory}
-                    </span>
-                    {project.featured && (
-                      <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                        <span>Live</span>
-                      </span>
-                    )}
-                  </div>
-
-                  <h3 className="font-heading font-black text-xl text-white group-hover:text-purple-200 transition-colors">
-                    {project.title}
-                  </h3>
-
-                  <p className="mt-2.5 text-xs text-slate-300 leading-relaxed font-normal line-clamp-3">
-                    {project.description}
-                  </p>
-                </div>
-
-                {/* Tech Stack Pills */}
-                <div className="mt-4 flex flex-wrap gap-1.5">
-                  {project.tech.slice(0, 4).map((tech) => (
-                    <span
-                      key={tech}
-                      className="px-2 py-0.5 rounded text-[10px] font-mono bg-white/[0.03] text-slate-300 border border-white/[0.06]"
-                    >
-                      {tech}
-                    </span>
-                  ))}
-                  {project.tech.length > 4 && (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono text-purple-300/70">
-                      +{project.tech.length - 4}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="mt-6 pt-4 border-t border-white/[0.08] flex items-center justify-between gap-2">
-                <button
-                  type="button"
-                  onClick={() => setActiveModalProject(project)}
-                  className="text-xs font-semibold text-purple-300 hover:text-white flex items-center gap-1 transition-colors"
-                >
-                  <span>Explore Architecture</span>
-                  <ArrowUpRight className="w-3.5 h-3.5" />
-                </button>
-
-                <div className="flex items-center gap-2">
-                  {project.links.live && (
-                    <a
-                      href={project.links.live}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="p-2 rounded-xl text-white bg-purple-600/40 hover:bg-purple-500/60 border border-purple-400/40 transition-colors"
-                      title="Open Live Website"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
-                  )}
-
-                  {project.links.github && (
-                    <a
-                      href={project.links.github}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="p-2 rounded-xl text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
-                      title="View GitHub Repository"
-                    >
-                      <GithubIcon className="w-3.5 h-3.5" />
-                    </a>
-                  )}
-                </div>
-              </div>
-
-            </div>
+              project={project}
+              renderProjectVisual={renderProjectVisual}
+              onOpenModal={setActiveModalProject}
+            />
           ))}
         </div>
 
